@@ -52,51 +52,12 @@ class CiudadanoView(APIView):
    else:
      return JsonResponse({"message": "No se ha encontrado el ciudadano."})
    
-def get_schema():
-  schema = '''
-   table
-   public.ciudadano (
-      ciudadano_cod character(11) not null,
-      ciudadano_nombre character varying(100) null,
-      constraint ciudadano_pkey primary key (ciudadano_cod)
-   ) tablespace pg_default;
-
-
-   table
-   public.tramite (
-      tramite_cod character(13) not null,
-      tramite_nombre character varying(100) null,
-      constraint tramite_pkey primary key (tramite_cod)
-   ) tablespace pg_default;
-
-
-   table
-   public.expediente (
-      exped_nro character(8) not null,
-      exped_anio character(4) not null,
-      exped_fecing timestamp without time zone null,
-      exped_observ character varying(700) null,
-      ciudadano_cod character(11) null,
-      tramite_cod character(13) null,
-      exped_finalizado boolean null,
-      constraint expediente_pkey primary key (exped_nro, exped_anio),
-      constraint expediente_ciudadano_cod_fkey foreign key (ciudadano_cod) references ciudadano (ciudadano_cod),
-      constraint expediente_tramite_cod_fkey foreign key (tramite_cod) references tramite (tramite_cod)
-   ) tablespace pg_default;
-   '''   
-  return schema
-
-class ResponseQueryFormat(BaseModel):
-    """Retorna los datos de la consulta en formato JSON."""
-    sql_query: str = Field(..., description="Consulta en SQL que recupera la información solicitada.")
-    original_query: str = Field(..., description="Consulta original en lenguaje humano.")
    
 
-def human_query_to_sql(human_query: str):   
+def query_to_sql(human_query: str):   
    db = get_database()
    llm = ChatOpenAI(model="gpt-4o-mini")
    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-   # prompt_template = hub.pull("langchain-ai/sql-agent-system-prompt")
    
    prompt_template =  ChatPromptTemplate.from_messages([
       ("system", '''Usted es un agente diseñado para interactuar con una base de datos SQL.
@@ -113,8 +74,6 @@ def human_query_to_sql(human_query: str):
    A continuación, debe consultar el esquema de las tablas más relevantes'''),
    ])
    
-   assert len(prompt_template.messages) == 1
-   # system_message = prompt_template.format(dialect="SQLite", top_k=5)
    system_message = prompt_template.format(dialect="PostgreSQL", top_k=5)
    agent_executor = create_react_agent(
     llm, toolkit.get_tools(), state_modifier=system_message
@@ -126,7 +85,7 @@ def human_query_to_sql(human_query: str):
    )
    response = ""
    for event in events:
-      # event["messages"][-1].pretty_print()
+      event["messages"][-1].pretty_print()
       response = event["messages"][-1].content
 
    return response
@@ -136,13 +95,11 @@ def get_database():
    db = SQLDatabase.from_uri(uri)
    return db
    
-
-class Joke(BaseModel):
-    '''Joke to tell user.'''
-
-    setup: str = Field(description="The setup of the joke")
-    punchline: str = Field(description="The punchline to the joke")
-    
-
-
-
+class QueryView(APIView):
+  def post(self, request, format=None):
+    try:
+      human_query = request.data.get('query')
+      response = query_to_sql(human_query)
+      return JsonResponse({"message": response})
+    except Exception as e:
+      return JsonResponse({"message": str(e)})
