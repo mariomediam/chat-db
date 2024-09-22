@@ -7,6 +7,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain import hub
+from langgraph.prebuilt import create_react_agent
+from langchain.schema.runnable import RunnableSequence
+from langchain.schema.runnable import RunnableBinding
 
 import os
 import json
@@ -17,6 +23,11 @@ from miapp.serializers import CiudadanoSerializer
 
 # Constantes
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+PGDATABASE = os.environ.get('PGDATABASE')
+PGUSER =  os.environ.get('PGUSER')
+PGPASSWORD = os.environ.get('PGPASSWORD')
+PGHOST = os.environ.get('PGHOST')
+PGPORT = os.environ.get('PGPORT')  
 
 # Create your views here.
 class HomeView(APIView):  
@@ -31,8 +42,8 @@ class CiudadanoView(APIView):
 
  def get(self, request, format=None):
    cod_ciudadano = request.GET.get('cod')
-   respuesta = human_query_to_sql("Que ciudadano tiene el código 0010389?")
-   print(respuesta)
+   # respuesta = human_query_to_sql("Cuantos expedientes ingrsaron en el año 2024, dame la respuesta por mes?")
+   # print(respuesta)
 
    if cod_ciudadano is not None:
       ciudadano = CiudadanoModel.objects.get(pk=cod_ciudadano)
@@ -79,47 +90,52 @@ class ResponseQueryFormat(BaseModel):
     """Retorna los datos de la consulta en formato JSON."""
     sql_query: str = Field(..., description="Consulta en SQL que recupera la información solicitada.")
     original_query: str = Field(..., description="Consulta original en lenguaje humano.")
+   
 
-# Define your desired data structure.
-class Joke(BaseModel):
-    setup: str = Field(..., description="question to set up a joke")
-    punchline: str = Field(..., description="answer to resolve the joke")
-
-    
-
-def human_query_to_sql(human_query: str):
-   database_schema = get_schema()
-   PROMPT_SYSTEM_TEMPLATE = ''' Dado el siguiente esquema, escriba una consulta SQL que recupere la información solicitada. 
-    Devuelve la consulta SQL dentro de una estructura JSON con la clave "sql_query".
-
-   <example>{{
-        "sql_query": "SELECT * FROM expediente WHERE exped_anio ='2024';"
-        "original_query": "Que expedientes se han registrado en el año 2024?"
-    }}
-    </example>
-    <schema>
-    {context}
-    </schema>
-   '''
-
-   PROMT_USER_TEMPLATE = '''Escribe una consulta SQL que recupere la información solicitada.
-   {context}
-   '''
+def human_query_to_sql(human_query: str):   
+   db = get_database()
    llm = ChatOpenAI(model="gpt-4o-mini")
-   model = ChatOpenAI(temperature=0)
-   prompt = ChatPromptTemplate.from_messages(
-      [("system", PROMPT_SYSTEM_TEMPLATE),
-       ("user", PROMT_USER_TEMPLATE)],
+   toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+   # prompt_template = hub.pull("langchain-ai/sql-agent-system-prompt")
+   
+   prompt_template =  ChatPromptTemplate.from_messages([
+      ("system", '''Usted es un agente diseñado para interactuar con una base de datos SQL.
+   Dada una pregunta de entrada, crea una consulta {dialect} sintácticamente correcta para ejecutarla, luego mira los resultados de la consulta y devuelve la respuesta.
+   A menos que el usuario especifique un número concreto de ejemplos que desea obtener, limite siempre su consulta a un máximo de {top_k} resultados.
+   Puede ordenar los resultados por una columna relevante para obtener los ejemplos más interesantes de la base de datos.
+   Nunca pregunte por todas las columnas de una tabla específica, sólo pregunte por las columnas relevantes dada la pregunta.
+   Tiene acceso a herramientas para interactuar con la base de datos.
+   Utilice únicamente las herramientas que se indican a continuación. Utilice únicamente la información que le proporcionen las siguientes herramientas para elaborar su respuesta final.
+   DEBE comprobar su consulta antes de ejecutarla. Si obtiene un error al ejecutar una consulta, reescríbala e inténtelo de nuevo.
+   NO realice ninguna sentencia DML (INSERT, UPDATE, DELETE, DROP, etc.) en la base de datos.
+   Para empezar, SIEMPRE debes mirar las tablas de la base de datos para ver qué puedes consultar.
+   No se salte este paso.
+   A continuación, debe consultar el esquema de las tablas más relevantes'''),
+   ])
+   
+   assert len(prompt_template.messages) == 1
+   # system_message = prompt_template.format(dialect="SQLite", top_k=5)
+   system_message = prompt_template.format(dialect="PostgreSQL", top_k=5)
+   agent_executor = create_react_agent(
+    llm, toolkit.get_tools(), state_modifier=system_message
    )
-   # parser = JsonOutputParser(pydantic_object=ResponseQueryFormat)
-   # chain = create_stuff_documents_chain(llm, prompt, output_parser=parser)
 
-   # # Invoke chain
-   # And a query intented to prompt a language model to populate the data structure.
-   structured_llm = llm.with_structured_output(ResponseQueryFormat)
-   # response = structured_llm.invoke("Tell me a joke about cats")
+   events = agent_executor.stream(
+      {"messages": [("user", human_query)]},
+      stream_mode="values",
+   )
+   response = ""
+   for event in events:
+      # event["messages"][-1].pretty_print()
+      response = event["messages"][-1].content
+
    return response
 
+def get_database():
+   uri = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+   db = SQLDatabase.from_uri(uri)
+   return db
+   
 
 class Joke(BaseModel):
     '''Joke to tell user.'''
