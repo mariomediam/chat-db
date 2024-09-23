@@ -2,17 +2,10 @@ from django.shortcuts import render
 from rest_framework.views import APIView  
 from django.http import JsonResponse  
 from langchain_openai import ChatOpenAI
-from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
-from langchain import hub
 from langgraph.prebuilt import create_react_agent
-from langchain.schema.runnable import RunnableSequence
-from langchain.schema.runnable import RunnableBinding
 
 import os
 import json
@@ -42,8 +35,6 @@ class CiudadanoView(APIView):
 
  def get(self, request, format=None):
    cod_ciudadano = request.GET.get('cod')
-   # respuesta = human_query_to_sql("Cuantos expedientes ingrsaron en el año 2024, dame la respuesta por mes?")
-   # print(respuesta)
 
    if cod_ciudadano is not None:
       ciudadano = CiudadanoModel.objects.get(pk=cod_ciudadano)
