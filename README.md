@@ -2,6 +2,20 @@
 
 Esta API permite realizar consultas en lenguaje natural a una base de datos alojada en **Supabase** utilizando OpenAI, Django y LangChain. La API traduce preguntas complejas en lenguaje humano a consultas SQL, devolviendo los resultados directamente desde la base de datos.
 
+https://github.com/user-attachments/assets/bf2c2bdc-d6de-44aa-b6a9-3f39f5ce708c
+
+### Schema
+![schema](https://github.com/user-attachments/assets/59b69077-56a2-4372-9389-6199cf14f2bb)
+
+### Trámite
+![tramite](https://github.com/user-attachments/assets/86c16a42-2589-49d0-9248-6718ab2f2e2e)
+
+### Ciudadano
+![ciudadano](https://github.com/user-attachments/assets/013c0449-ce97-4564-9fd3-7153f1a6e900)
+
+### Expediente
+![expediente](https://github.com/user-attachments/assets/d31b911f-7929-4f3f-a5e5-24579bd2d1e1)
+
 ## Características
 
 - **Consultas en lenguaje natural**: Realiza preguntas sobre la base de datos sin necesidad de escribir SQL.
