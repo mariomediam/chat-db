@@ -57,4 +57,4 @@ $ docker compose up -d
 
 Después de que se inicie la aplicación ejecute la API `http://localhost:8000/query/` tal como se indica en el video anterior:
 
-
+Gracias
